@@ -15,6 +15,7 @@ meeting.mp4 → transcript (Whisper) → speakers (pyannote) → summary (Ollama
   - **Ollama** (fully local) or **Claude** (Anthropic API), switchable per meeting
 - **Sensible file names**, such as `2026-10-14_Q4-Budget-Review/`, using the recording date plus an AI-generated title. You can edit the name in the UI and the folder and every file are renamed to match
 - Outputs `_transcript.txt`, `.srt` subtitles, `_summary.md`, full `.json`, and an optional 16 kHz WAV
+- **Delete** a meeting from the UI, which moves its folder to the Recycle Bin so it can be restored
 - Light and dark themes, keyboard friendly
 
 ## Setup (Windows)
@@ -34,20 +35,22 @@ The Whisper model (~1.6 GB) downloads automatically on first use, and after that
 ### Optional: summaries
 
 - **Local:** install [Ollama](https://ollama.com/download), then `ollama pull qwen2.5:7b`. Any chat model you have pulled can be picked in Settings.
-- **Claude:** paste an [Anthropic API key](https://console.anthropic.com/) into **Settings → Summary**. Only the transcript text is sent to Anthropic, never the audio.
+- **Claude:** paste an [Anthropic API key](https://console.anthropic.com/) into **Settings → Summary**. Only the transcript text is sent to Anthropic, never the audio. If your key isn't scoped to a workspace, also fill in **Workspace ID**.
 
 Keys are stored only in `data/settings.json`, which git ignores.
 
 ## Performance
 
-These figures are for CPU only (tested on a Ryzen 7 7730U). A GPU isn't required.
+These timings were measured on CPU only (Ryzen 7 7730U, a laptop chip, no GPU), and the 1-hour column is extrapolated from them.
 
-| Step | 1-hour meeting |
-| --- | --- |
-| Transcribe (`large-v3-turbo` int8) | ~25–40 min |
-| Speakers | ~5–15 min |
-| Summary (Ollama 7B) | ~3–6 min |
-| Summary (Claude) | ~30 s |
+| Step | 9-min recording (measured) | 1-hour meeting (est.) |
+| --- | --- | --- |
+| Transcribe (`large-v3-turbo` int8) | 4 min | ~28 min |
+| Speakers (pyannote 3.1) | 7.5 min | ~50 min |
+| Summary (Ollama `qwen2.5:7b`) | 3 min | ~10–15 min |
+| Summary (Claude) | ~20 s | ~30–60 s |
+
+Speaker detection is the slow step on CPU. Turn it off in Settings when you only need the text. GPU acceleration isn't wired up yet.
 
 ## Project layout
 

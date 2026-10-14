@@ -801,6 +801,15 @@ async function poll(now = false) {
     const isBusy = state.jobs.some((j) => j.kind === "summarize" && ["queued", "running"].includes(j.status) && j.meeting_id === state.selected);
     if (wasBusy !== isBusy && state.meeting) renderDetail();
     renderQueue();
+    // Pick up meetings added, renamed or deleted outside this page (e.g. in Explorer).
+    if (Date.now() - (state.lastListLoad || 0) > 5000) {
+      state.lastListLoad = Date.now();
+      await loadMeetings();
+      if (state.selected && !state.meetings.some((m) => m.id === state.selected)) {
+        state.selected = null; state.meeting = null;
+        renderHistory(); renderDetail();
+      }
+    }
   } catch { /* server not reachable; keep trying */ }
   const active = state.uploads.size || state.jobs.some((j) => ["queued", "running"].includes(j.status));
   pollTimer = setTimeout(poll, active ? 900 : 4000);
