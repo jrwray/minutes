@@ -349,7 +349,10 @@ async function select(id, keepTab = false) {
   try {
     state.meeting = await api(`/api/meetings/${id}`);
   } catch (e) {
-    toast(e.message, "err"); state.meeting = null;
+    // e.g. deleted in Explorer, or from a job card whose meeting is gone
+    toast(e.message === "Meeting not found" ? "That meeting no longer exists" : e.message, "err");
+    state.selected = null; state.meeting = null;
+    await loadMeetings(); renderHistory();
   }
   renderDetail();
 }
@@ -777,6 +780,12 @@ async function poll(now = false) {
   clearTimeout(pollTimer);
   try {
     const jobs = await api("/api/jobs");
+    if (!state.primed) {
+      // Jobs that finished before this page loaded were already announced; don't
+      // re-toast them or jump to their meeting on every reload.
+      state.primed = true;
+      for (const j of jobs) if (["done", "error", "cancelled"].includes(j.status)) state.seenDone.add(j.id);
+    }
     for (const j of jobs) {
       if (j.status === "done" && !state.seenDone.has(j.id)) {
         state.seenDone.add(j.id);
