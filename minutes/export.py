@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import uuid
 from pathlib import Path
 
 from .summarize import fmt_time
@@ -127,13 +129,47 @@ def render_summary_md(meeting: dict) -> str:
 # ---------------------------------------------------------------- writing
 
 
+def _same_name(a: str, b: str) -> bool:
+    # Windows (and default macOS) file systems are case-insensitive: "Notes" and "notes"
+    # are the same file. Comparing case-insensitively everywhere is the safe direction:
+    # at worst a stale file is kept, never a just-written one deleted.
+    return a.casefold() == b.casefold()
+
+
+def _same_path(a: Path, b: Path) -> bool:
+    try:
+        return a.exists() and b.exists() and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _rename(src: Path, dst: Path) -> None:
+    """Rename, including case-only changes (which need a hop through a temp name)."""
+    if src.name == dst.name and src.parent == dst.parent:
+        return
+    if _same_name(str(src), str(dst)):
+        tmp = src.with_name(f"{src.name}.renaming-{uuid.uuid4().hex[:8]}")
+        src.rename(tmp)
+        tmp.rename(dst)
+    else:
+        src.rename(dst)
+
+
 def unique_folder(base: Path, name: str, current: Path | None = None) -> Path:
     candidate = base / name
     n = 2
-    while candidate.exists() and (current is None or candidate.resolve() != current.resolve()):
+    while candidate.exists() and not (current is not None and _same_path(candidate, current)):
         candidate = base / f"{name} ({n})"
         n += 1
     return candidate
+
+
+def _kind(filename: str) -> str | None:
+    for kind, suffix in (("transcript", "_transcript.txt"), ("summary", "_summary.md"),
+                         ("wav", "_audio.wav"), ("srt", ".srt"), ("json", ".json")):
+        if filename.endswith(suffix):
+            return kind
+    return None
 
 
 def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = None) -> dict:
@@ -145,18 +181,21 @@ def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = Non
 
     name = clean_name(meeting["name"])
     folder = unique_folder(output_dir if not old_folder else old_folder.parent, name, old_folder)
-    if folder.name != name:
-        name = folder.name
-    if old_folder and old_folder.exists() and old_folder.resolve() != folder.resolve():
-        old_folder.rename(folder)
+    name = folder.name
+    if old_folder and old_folder.exists():
+        _rename(old_folder, folder)
     folder.mkdir(parents=True, exist_ok=True)
 
     names = file_names(name)
-    # Carry an existing WAV across a rename.
-    if old_folder:
-        for f in old_files:
-            if f.endswith("_audio.wav") and (folder / f).exists() and f != names["wav"]:
-                (folder / f).rename(folder / names["wav"])
+    # Move each existing file to its new name rather than writing copies and deleting
+    # "old" ones; on a case-insensitive file system those can be the same file.
+    for f in old_files:
+        kind = _kind(f)
+        if kind and (folder / f).exists() and f != names[kind]:
+            target = folder / names[kind]
+            if target.exists() and not _same_name(f, names[kind]):
+                target.unlink()
+            _rename(folder / f, target)
     if wav_source and wav_source.exists():
         shutil.move(str(wav_source), folder / names["wav"])
 
@@ -172,8 +211,9 @@ def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = Non
     (folder / names["json"]).write_text(
         json.dumps({"app": APP_MARKER, **meeting}, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    current = {f.casefold() for f in files}
     for f in old_files:
-        if f not in files and (folder / f).exists():
+        if f.casefold() not in current and (folder / f).exists():
             (folder / f).unlink()
     return meeting
 
