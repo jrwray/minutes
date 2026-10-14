@@ -36,18 +36,25 @@ manager = Manager()
 # still send requests to it. Two checks keep other sites out:
 #  1. Host allowlist: defeats DNS rebinding (a hostile domain re-pointed at 127.0.0.1
 #     would otherwise be able to read transcripts).
-#  2. State-changing requests need the custom X-Minutes header, which a cross-site page
-#     can't add without a CORS preflight that this server never grants, and any Origin
-#     sent must match the server's own address.
+#  2. State-changing requests from a browser must be same-origin and carry the custom
+#     X-Minutes header, which a cross-site page can't add without a CORS preflight that
+#     this server never grants.
+# Cross-site attacks can only come from a browser, and browsers mark every request with
+# Sec-Fetch-Site (and Origin on cross-origin writes); pages can't remove those. Requests
+# with neither are from scripts (curl, Python) and don't need the header.
 
 
 @app.middleware("http")
 async def same_origin_writes(request: Request, call_next):
     if request.method in UNSAFE_METHODS:
         origin = request.headers.get("origin")
-        if origin and urlsplit(origin).netloc != request.headers.get("host", ""):
+        fetch_site = request.headers.get("sec-fetch-site")
+        if origin is not None and urlsplit(origin).netloc != request.headers.get("host", ""):
             return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
-        if request.headers.get("x-minutes") != "1":
+        if fetch_site is not None and fetch_site != "same-origin":
+            return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
+        from_browser = origin is not None or fetch_site is not None
+        if from_browser and request.headers.get("x-minutes") != "1":
             return JSONResponse({"detail": "Missing X-Minutes header."}, status_code=403)
     return await call_next(request)
 

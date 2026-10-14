@@ -75,10 +75,10 @@ uv run pytest
 
 The tests use fake transcription/speaker/summary engines and a temporary output folder, so they run in seconds and never touch your real meetings or settings. CI runs them on Windows for every push.
 
-The API only accepts requests addressed to `127.0.0.1`/`localhost`, and requests that change anything must send the header `X-Minutes: 1`, which keeps other websites open in your browser from using it. Scripts need to send that header too:
+The API only accepts requests addressed to `127.0.0.1`/`localhost`. Requests from a browser that change anything must come from the Minutes page itself and carry an `X-Minutes: 1` header, which keeps other websites open in your browser from using the API. Scripts (which aren't browsers) can call it directly:
 
 ```
-curl -H "X-Minutes: 1" -F "file=@meeting.mp4" http://127.0.0.1:7860/api/upload
+curl -F "file=@meeting.mp4" http://127.0.0.1:7860/api/upload
 ```
 
 ## License
