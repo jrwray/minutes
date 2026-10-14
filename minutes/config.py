@@ -4,6 +4,7 @@ except the Anthropic key, which is sent to Anthropic when the Claude engine is u
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -32,6 +33,14 @@ DEFAULTS: dict = {
 }
 
 SECRET_KEYS = ("hf_token", "anthropic_api_key")
+
+
+def run_dir() -> Path:
+    """This process's scratch folder for uploads and temp WAVs. Per-process, so a
+    second running copy of the app can tell its files apart (see jobs.clean_work_dir)."""
+    path = WORK_DIR / f"run-{os.getpid()}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 # Re-entrant: save() holds it across its load-modify-write so concurrent saves of
 # different keys can't overwrite each other.

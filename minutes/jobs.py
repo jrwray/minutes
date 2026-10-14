@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import queue
+import shutil
 import threading
 import time
 import traceback
@@ -18,6 +20,52 @@ from .transcribe import Cancelled
 log = logging.getLogger("minutes")
 
 STAGES = ["audio", "transcribe", "speakers", "summary", "save"]
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5  # access denied: exists, owned by someone else
+        code = ctypes.c_ulong()
+        ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel32.CloseHandle(handle)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)  # POSIX only: signal 0 just checks. (On Windows os.kill terminates!)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def clean_work_dir() -> None:
+    """Remove uploads and temp files left behind when the app was closed mid-job.
+    The queue lives in memory, so a dead process's files can never be processed.
+    Folders of copies that are still running are left alone."""
+    if not config.WORK_DIR.exists():
+        return
+    removed = 0
+    for entry in config.WORK_DIR.iterdir():
+        try:
+            if entry.is_dir() and entry.name.startswith("run-"):
+                pid = entry.name.removeprefix("run-")
+                if pid.isdigit() and not _pid_alive(int(pid)):
+                    shutil.rmtree(entry, ignore_errors=True)
+                    removed += 1
+            elif entry.is_file() and time.time() - entry.stat().st_mtime > 3600:
+                entry.unlink()  # loose files from versions before per-process folders
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        log.info("Cleaned up %d leftover upload(s) from earlier runs", removed)
 
 
 @dataclass
@@ -317,7 +365,7 @@ class Manager:
         meeting["name"] = export.default_name(job.meeting_date, title, fallback)
         wav_tmp = None
         if settings["keep_wav"]:
-            wav_tmp = config.WORK_DIR / f"{job.id}.wav"
+            wav_tmp = config.run_dir() / f"{job.id}.wav"
             audio_mod.write_wav(audio, wav_tmp)
         meeting = self._save(meeting, settings, wav_tmp)
         job.meeting_id = meeting["id"]

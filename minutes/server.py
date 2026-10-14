@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,13 +15,19 @@ from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import config, summarize
-from .jobs import Manager
+from .jobs import Manager, clean_work_dir
 
 STATIC = config.ROOT / "static"
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-app = FastAPI(title="Minutes", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    clean_work_dir()
+    yield
+
+
+app = FastAPI(title="Minutes", docs_url=None, redoc_url=None, lifespan=lifespan)
 manager = Manager()
 
 
@@ -98,9 +105,8 @@ def set_settings(patch: dict):
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...), last_modified: float | None = Form(None)):
-    config.WORK_DIR.mkdir(parents=True, exist_ok=True)
     suffix = Path(file.filename or "").suffix[:10] or ".bin"
-    dest = config.WORK_DIR / f"{uuid.uuid4().hex}{suffix}"
+    dest = config.run_dir() / f"{uuid.uuid4().hex}{suffix}"
     with dest.open("wb") as out:
         while chunk := await file.read(8 * 1024 * 1024):
             out.write(chunk)
