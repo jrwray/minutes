@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,9 +43,39 @@ def run_dir() -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-# Re-entrant: save() holds it across its load-modify-write so concurrent saves of
-# different keys can't overwrite each other.
+# save() holds both locks across its load-modify-write so concurrent saves of different
+# keys can't overwrite each other: the RLock between threads of this process, the lock
+# file between processes (e.g. Start.bat plus a second copy on another port).
 _lock = threading.RLock()
+
+
+@contextmanager
+def _process_lock():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DATA_DIR / "settings.lock", "a+b") as f:
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)  # blocks (retries ~10 s)
+                    break
+                except OSError:
+                    continue
+            try:
+                yield
+            finally:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def load() -> dict:
@@ -61,7 +92,7 @@ def load() -> dict:
 def save(patch: dict) -> dict:
     from .export import write_atomic
 
-    with _lock:
+    with _lock, _process_lock():
         current = load()
         for key, value in patch.items():
             if key not in DEFAULTS:

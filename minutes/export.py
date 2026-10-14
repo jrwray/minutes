@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -142,10 +143,24 @@ def write_atomic(path: Path, text: str) -> None:
     tmp = path.with_name(f"{path.name}.tmp-{uuid.uuid4().hex[:8]}")
     try:
         tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _replace(src: Path, dst: Path, attempts: int = 50) -> None:
+    # Windows refuses to replace a file another process has open (e.g. a second copy
+    # of the app reading settings.json at that instant); readers finish in
+    # milliseconds, so retry briefly.
+    for i in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(0.02)
 
 
 def _same_name(a: str, b: str) -> bool:
