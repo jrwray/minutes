@@ -88,10 +88,18 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 def status():
     from .transcribe import is_model_cached
 
+    from . import device
+
     s = config.load()
     models = summarize.ollama_models(s["ollama_url"])
     return {
         "whisper": {"model": s["whisper_model"], "cached": is_model_cached(s["whisper_model"])},
+        "device": {
+            "setting": s["device"],  # "" until the user picks one
+            "active": device.resolve(s["device"] or "cpu"),
+            "cpu": device.cpu_name(),
+            "gpu": device.gpu_info(),
+        },
         "speakers": {"enabled": bool(s["diarization"]), "ready": bool(s["hf_token"])},
         "ollama": {
             "running": models is not None,

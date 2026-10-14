@@ -397,6 +397,26 @@ mark { background: color-mix(in oklab, var(--warn) 35%, transparent); color: inh
 .modal p b { color: var(--text); font-weight: 600; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* ------------------------------------------------------------------ device choice */
+.modal.wide { width: min(520px, 100%); }
+.modal-icon.accent { background: var(--accent-soft); color: var(--accent); }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice {
+  display: flex; flex-direction: column; gap: 12px; text-align: left; padding: 16px; border-radius: 14px;
+  border: 1.5px solid var(--border); background: var(--bg); transition: border-color .2s, transform .2s var(--ease), box-shadow .2s;
+}
+.choice:hover:not([disabled]), .choice:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); transform: translateY(-2px); }
+.choice:active:not([disabled]) { transform: scale(.98); }
+.choice[disabled] { opacity: .55; cursor: not-allowed; }
+.choice-ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); color: var(--accent); }
+.choice-body { display: flex; flex-direction: column; gap: 3px; }
+.choice-body b { font-size: 15px; }
+.choice-body small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.choice-body em { font-style: normal; font-size: 12px; color: var(--faint); line-height: 1.45; margin-top: 4px; }
+.seg button[disabled] { opacity: .45; cursor: not-allowed; }
+.seg-ink { transition: left .3s var(--ease), width .3s var(--ease), opacity .2s; }
+@media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
+
 /* ------------------------------------------------------------------ overlays */
 .dragover { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: color-mix(in oklab, var(--bg) 70%, transparent); backdrop-filter: blur(8px); opacity: 0; pointer-events: none; transition: opacity .2s; }
 .dragover.on { opacity: 1; }

@@ -17,7 +17,8 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 DEFAULTS: dict = {
     "output_dir": str(Path.home() / "Videos" / "Transcripts"),
     "whisper_model": "large-v3-turbo",
-    "compute_type": "int8",
+    "compute_type": "int8",  # CPU; the GPU always uses float16
+    "device": "",  # "" = not chosen yet (the UI asks on first run) | "cpu" | "gpu"
     "language": "auto",
     "vocabulary": "",
     "diarization": True,

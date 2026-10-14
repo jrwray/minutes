@@ -303,12 +303,18 @@ class Manager:
             job.message = "Downloading Whisper model (first run only, ~1.6 GB)…"
         progress = self._progress(job)
 
+        from . import device as dev
+
+        where = "on GPU" if dev.resolve(settings.get("device") or "cpu") == "cuda" else "on CPU"
+
         def on_text(p: float, text: str) -> None:
-            progress(p, "Transcribing…")
+            progress(p, f"Transcribing {where}…")
             job.preview = text
 
         result = tr.transcribe(audio, settings, on_text, cancelled)
         job.preview = ""
+        if result.get("gpu_fallback"):
+            job.warnings.append(f"Used the CPU instead of the GPU: {result['gpu_fallback']}")
         segments = result["segments"]
         if not segments:
             job.warnings.append("No speech was detected.")
@@ -348,6 +354,7 @@ class Manager:
             "summary": None,
             "summary_engine": None,
             "whisper_model": settings["whisper_model"],
+            "device": result.get("device", "cpu"),
             "folder": None,
             "files": [],
         }

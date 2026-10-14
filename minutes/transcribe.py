@@ -1,4 +1,4 @@
-"""Speech-to-text with faster-whisper (CPU, int8)."""
+"""Speech-to-text with faster-whisper: CPU (int8) or NVIDIA GPU (float16)."""
 
 from __future__ import annotations
 
@@ -34,9 +34,9 @@ def is_model_cached(name: str) -> bool:
         return False
 
 
-def get_model(name: str, compute_type: str, threads: int):
+def get_model(name: str, device: str, compute_type: str, threads: int):
     global _model, _model_key
-    key = (name, compute_type, threads)
+    key = (name, device, compute_type, threads)
     with _lock:
         if _model is None or _model_key != key:
             from faster_whisper import WhisperModel
@@ -44,7 +44,7 @@ def get_model(name: str, compute_type: str, threads: int):
             _model = None  # free the old one before loading a new one
             _model = WhisperModel(
                 name,
-                device="cpu",
+                device=device,
                 compute_type=compute_type,
                 cpu_threads=threads or default_threads(),
             )
@@ -58,9 +58,51 @@ def transcribe(
     on_progress: Callable[[float, str], None],
     is_cancelled: Callable[[], bool],
 ) -> dict:
-    model = get_model(
-        settings["whisper_model"], settings["compute_type"], int(settings.get("cpu_threads") or 0)
-    )
+    """Transcribe on the chosen device. If the GPU fails (no driver, missing CUDA
+    library), fall back to the CPU; the result's "gpu_fallback" says why."""
+    from . import device as dev
+
+    target = dev.resolve(settings.get("device") or "cpu")
+    fallback = None
+    if settings.get("device") == "gpu" and target == "cpu":
+        fallback = dev.gpu_info()["reason"] or "GPU unavailable."
+    if target == "cuda":
+        try:
+            return _transcribe_on("cuda", "float16", audio, settings, on_progress, is_cancelled)
+        except Cancelled:
+            raise
+        except _GpuStartupError as exc:
+            fallback = f"GPU failed to start ({exc.__cause__})."
+    result = _transcribe_on("cpu", settings["compute_type"], audio, settings, on_progress, is_cancelled)
+    result["gpu_fallback"] = fallback
+    return result
+
+
+class _GpuStartupError(Exception):
+    """The GPU failed before producing any text, so retrying on the CPU loses nothing."""
+
+
+def _transcribe_on(device, compute_type, audio, settings, on_progress, is_cancelled) -> dict:
+    produced = False
+    try:
+        model = get_model(settings["whisper_model"], device, compute_type, int(settings.get("cpu_threads") or 0))
+        for result in _run(model, audio, settings, on_progress, is_cancelled):
+            produced = True
+            if isinstance(result, dict):
+                return {**result, "device": device, "gpu_fallback": None}
+    except Cancelled:
+        raise
+    except (RuntimeError, OSError, ValueError) as exc:
+        # CUDA problems surface either at load or on the first decode (cuBLAS is loaded
+        # lazily). Only fall back if nothing was produced yet.
+        if device == "cuda" and not produced:
+            raise _GpuStartupError() from exc
+        raise
+    raise RuntimeError("Transcription produced no result.")
+
+
+def _run(model, audio, settings, on_progress, is_cancelled):
+    """Yields once per segment (so the caller knows decoding started), then the result."""
     language = settings.get("language") or "auto"
     vocabulary = (settings.get("vocabulary") or "").strip()
 
@@ -96,8 +138,9 @@ def transcribe(
             }
         )
         on_progress(min(seg.end / duration, 1.0) if duration else 0.0, text)
+        yield None
 
-    return {
+    yield {
         "language": info.language,
         "language_probability": round(info.language_probability, 3),
         "duration": round(duration, 2),

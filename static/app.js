@@ -37,7 +37,8 @@ const ICONS = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
-  trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
+  zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+  trash:'<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
   hourglass:'<path d="M6 2h12M6 22h12M7 2v4a5 5 0 0 0 10 0V2M7 22v-4a5 5 0 0 1 10 0v4"/>',
 };
 const icon = (name, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -154,7 +155,15 @@ function renderStatus() {
   const s = state.status;
   if (!s) return;
   const pills = [];
-  pills.push({ dot: s.whisper.cached ? "ok" : "warn", label: "Whisper", tip: s.whisper.cached ? `${s.whisper.model} ready` : "Model downloads on first use (~1.6 GB)" });
+  const onGpu = s.device.active === "cuda";
+  const gpuMissing = s.device.setting === "gpu" && !onGpu;
+  pills.push({
+    dot: !s.whisper.cached || gpuMissing ? "warn" : "ok",
+    label: `Whisper · ${onGpu ? "GPU" : "CPU"}`,
+    tip: gpuMissing ? `GPU selected but unavailable, using the CPU. ${s.device.gpu.reason || ""}`
+      : !s.whisper.cached ? "Model downloads on first use (~1.6 GB)"
+      : `${s.whisper.model} on ${onGpu ? s.device.gpu.name || "GPU" : s.device.cpu}`,
+  });
   if (s.speakers.enabled) {
     pills.push({ dot: s.speakers.ready ? "ok" : "warn", label: "Speakers", tip: s.speakers.ready ? "Speaker detection on" : "Add a Hugging Face token in Settings" });
   } else pills.push({ dot: "", label: "Speakers off", tip: "Speaker detection is off" });
@@ -693,6 +702,16 @@ function renderSettings(keepScroll = false) {
   $("#drawer").innerHTML = `<div class="drawer-head"><h2>Settings</h2><button class="icon-btn" id="closeDrawer">${icon("x")}</button></div>
   <div class="drawer-body">
     <div class="group"><h3>${icon("mic")}Transcription</h3>
+      <div class="field"><label>Run on</label>
+        <div class="seg" id="deviceSeg"><span class="seg-ink"></span>
+          <button data-v="cpu" class="${s.device === "cpu" ? "on" : ""}">${icon("cpu")}CPU</button>
+          <button data-v="gpu" class="${s.device === "gpu" ? "on" : ""}" ${st.device.gpu.available ? "" : `disabled title="${esc(st.device.gpu.reason)}"`}>${icon("zap")}GPU</button>
+        </div>
+        <div class="help">${st.device.gpu.available
+          ? `CPU: ${esc(st.device.cpu)} · GPU: ${esc(st.device.gpu.name || "NVIDIA")}. The GPU speeds up transcription; speaker detection stays on the CPU.`
+          : `${esc(st.device.cpu)}. GPU: ${esc(st.device.gpu.reason)}`}</div>
+        ${s.device === "gpu" && st.device.active !== "cuda" ? `<div class="callout warn">${icon("alert")}<span>GPU is selected but unavailable, so the CPU is used. ${esc(st.device.gpu.reason || "")}</span></div>` : ""}
+      </div>
       <div class="row">
         <div class="field"><label>Whisper model</label><select class="select" data-k="whisper_model">
           ${opt("large-v3-turbo", "large-v3-turbo · recommended", s.whisper_model)}${opt("large-v3", "large-v3 · most accurate, slow", s.whisper_model)}
@@ -768,6 +787,49 @@ function renderSettings(keepScroll = false) {
     placeInk();
     setTimeout(() => saveSetting({ summary_engine: b.dataset.v }), 220);
   }));
+
+  const dseg = $("#deviceSeg"), dink = $(".seg-ink", dseg);
+  const placeDink = () => {
+    const on = $("button.on", dseg);
+    dink.style.opacity = on ? 1 : 0;
+    if (on) { dink.style.left = on.offsetLeft + "px"; dink.style.width = on.offsetWidth + "px"; }
+  };
+  requestAnimationFrame(placeDink);
+  dseg.querySelectorAll("button:not([disabled])").forEach((b) => (b.onclick = () => {
+    dseg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    placeDink();
+    setTimeout(() => saveSetting({ device: b.dataset.v }), 220);
+  }));
+}
+
+/* ================================================================ device choice */
+function deviceDialog() {
+  const d = state.status.device, gpu = d.gpu;
+  const wrap = document.createElement("div");
+  wrap.className = "modal-scrim";
+  wrap.innerHTML = `<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="devTitle">
+    <div class="modal-icon accent">${icon("cpu")}</div>
+    <h3 id="devTitle">Where should transcription run?</h3>
+    <p>Pick the processor Whisper uses. You can change this anytime in Settings.</p>
+    <div class="choices">
+      <button class="choice" data-v="cpu">
+        <span class="choice-ic">${icon("cpu")}</span>
+        <span class="choice-body"><b>CPU</b><small>${esc(d.cpu)}</small><em>Works on any computer</em></span>
+      </button>
+      <button class="choice" data-v="gpu" ${gpu.available ? "" : "disabled"}>
+        <span class="choice-ic">${icon("zap")}</span>
+        <span class="choice-body"><b>GPU</b><small>${esc(gpu.name || (gpu.detected ? "NVIDIA GPU" : "NVIDIA only"))}</small>
+          <em>${esc(gpu.available ? "Much faster on supported NVIDIA cards" : gpu.reason)}</em></span>
+      </button>
+    </div></div>`;
+  wrap.querySelectorAll(".choice:not([disabled])").forEach((b) => (b.onclick = async () => {
+    wrap.classList.add("out");
+    setTimeout(() => wrap.remove(), 200);
+    await saveSetting({ device: b.dataset.v }, true);
+    toast(`Transcription will run on the ${b.dataset.v.toUpperCase()}`);
+  }));
+  document.body.appendChild(wrap);
+  (wrap.querySelector(".choice[data-v=gpu]:not([disabled])") || wrap.querySelector(".choice")).focus();
 }
 
 /* ================================================================ polling */
@@ -838,6 +900,7 @@ async function poll(now = false) {
     api("/api/settings").then((s) => (state.settings = s)),
     loadMeetings(),
   ]);
+  if (state.status && !state.settings.device) deviceDialog();
   poll();
   setInterval(refreshStatus, 15000);
   window.addEventListener("resize", moveInk);
