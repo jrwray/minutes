@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bisect
+import os
 import threading
 from typing import Callable
 
@@ -24,7 +25,19 @@ def get_pipeline(token: str):
         if _pipeline is None or _pipeline_token != token:
             from pyannote.audio import Pipeline
 
-            pipeline = Pipeline.from_pretrained(PIPELINE_ID, use_auth_token=token)
+            # PyTorch >= 2.6 defaults torch.load to weights_only=True, which rejects the
+            # pyannote 3.x checkpoints (they pickle a TorchVersion and other metadata).
+            # These come from pyannote's official, gated Hugging Face repos, so allow the
+            # full load for this call only and restore the safe default afterwards.
+            previous = os.environ.get("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD")
+            os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+            try:
+                pipeline = Pipeline.from_pretrained(PIPELINE_ID, use_auth_token=token)
+            finally:
+                if previous is None:
+                    os.environ.pop("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", None)
+                else:
+                    os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = previous
             if pipeline is None:
                 raise RuntimeError(
                     "Couldn't load the speaker model. Check your Hugging Face token and that "
