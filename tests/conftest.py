@@ -45,6 +45,8 @@ class FakeEngines:
         self.slow = False
         self.summary_fails = False
         self.summary_calls = []
+        self.summary_gate = None  # threading.Event: summarize blocks until it's set
+        self.summary_started = None  # threading.Event: set when summarize begins
 
     def load_audio(self, path, display_name=None):
         import numpy as np
@@ -68,6 +70,10 @@ class FakeEngines:
 
     def summarize(self, segments, speakers, meeting_date, settings, engine, on_progress, is_cancelled):
         self.summary_calls.append({"engine": engine, "speakers": dict(speakers)})
+        if self.summary_started:
+            self.summary_started.set()
+        if self.summary_gate:
+            self.summary_gate.wait(10)
         if self.summary_fails:
             raise RuntimeError("Ollama isn't running.")
         owner = speakers.get("Speaker 2", "Speaker 2")

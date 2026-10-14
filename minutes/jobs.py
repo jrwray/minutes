@@ -67,7 +67,10 @@ class Manager:
     def __init__(self) -> None:
         self.jobs: dict[str, Job] = {}
         self.q: queue.Queue[str] = queue.Queue()
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()  # guards self.jobs
+        # Serializes every write to a meeting's folder (rename, speaker edits, summary
+        # saves, delete) so two writers never interleave on the same files.
+        self.write_lock = threading.RLock()
         self.meetings: dict[str, Path] = {}  # meeting id -> json path
         threading.Thread(target=self._worker, daemon=True, name="minutes-worker").start()
 
@@ -134,6 +137,10 @@ class Manager:
         return export.read_meeting(path) if path and path.exists() else None
 
     def update_meeting(self, meeting_id: str, name: str | None, speakers: dict | None) -> dict:
+        with self.write_lock:
+            return self._update_meeting(meeting_id, name, speakers)
+
+    def _update_meeting(self, meeting_id: str, name: str | None, speakers: dict | None) -> dict:
         meeting = self.get_meeting(meeting_id)
         if not meeting:
             raise KeyError(meeting_id)
@@ -146,18 +153,17 @@ class Manager:
             meeting["speakers"] = new
         if name is not None and name.strip():
             meeting["name"] = export.clean_name(name)
-        meeting = export.write_meeting(meeting, Path(config.load()["output_dir"]))
-        self.meetings[meeting["id"]] = Path(meeting["folder"]) / export.file_names(meeting["name"])["json"]
-        return meeting
+        return self._save(meeting, config.load())
 
     def delete_meeting(self, meeting_id: str) -> None:
-        meeting = self.get_meeting(meeting_id)
-        if not meeting:
-            raise KeyError(meeting_id)
-        if any(j.meeting_id == meeting_id and j.status in ("queued", "running") for j in self.jobs.values()):
-            raise RuntimeError("This meeting is being summarized. Wait for it to finish or cancel it first.")
-        export.to_recycle_bin(Path(meeting["folder"]))
-        self.meetings.pop(meeting_id, None)
+        with self.write_lock:
+            meeting = self.get_meeting(meeting_id)
+            if not meeting:
+                raise KeyError(meeting_id)
+            if any(j.meeting_id == meeting_id and j.status in ("queued", "running") for j in self.jobs.values()):
+                raise RuntimeError("This meeting is being summarized. Wait for it to finish or cancel it first.")
+            export.to_recycle_bin(Path(meeting["folder"]))
+            self.meetings.pop(meeting_id, None)
 
     # ------------------------------------------------------------ internals
 
@@ -286,10 +292,19 @@ class Manager:
         if settings["keep_wav"]:
             wav_tmp = config.WORK_DIR / f"{job.id}.wav"
             audio_mod.write_wav(audio, wav_tmp)
-        meeting = export.write_meeting(meeting, Path(settings["output_dir"]), wav_tmp)
-        self.meetings[meeting["id"]] = Path(meeting["folder"]) / export.file_names(meeting["name"])["json"]
+        meeting = self._save(meeting, settings, wav_tmp)
         job.meeting_id = meeting["id"]
         job.stage_progress = 1.0
+
+    def _save(self, meeting: dict, settings: dict, wav_source: Path | None = None) -> dict:
+        with self.write_lock:
+            meeting = export.write_meeting(meeting, Path(settings["output_dir"]), wav_source)
+            self.meetings[meeting["id"]] = Path(meeting["folder"]) / export.file_names(meeting["name"])["json"]
+            return meeting
+
+    @staticmethod
+    def _engine_label(engine: str, settings: dict) -> str:
+        return f"Claude ({settings['claude_model']})" if engine == "claude" else f"Ollama ({settings['ollama_model']})"
 
     def _summarize_into(self, job: Job, meeting: dict, engine: str, settings: dict) -> None:
         from . import summarize as sm
@@ -298,10 +313,7 @@ class Manager:
                 meeting["segments"], meeting["speakers"], meeting["meeting_date"], settings, engine,
                 self._progress(job), job.cancel.is_set,
             )
-            meeting["summary_engine"] = (
-                f"Claude ({settings['claude_model']})" if engine == "claude"
-                else f"Ollama ({settings['ollama_model']})"
-            )
+            meeting["summary_engine"] = self._engine_label(engine, settings)
         except Cancelled:
             raise
         except Exception as exc:
@@ -309,16 +321,29 @@ class Manager:
             job.warnings.append(f"Summary failed: {exc}")
 
     def _resummarize(self, job: Job) -> None:
+        from . import summarize as sm
+
         settings = config.load()
         meeting = self.get_meeting(job.meeting_id)
         if not meeting:
             raise RuntimeError("Meeting not found.")
         self._stage(job, "summary", "Summarizing…")
-        before = meeting.get("summary")
-        self._summarize_into(job, meeting, job.engine, settings)
-        if job.warnings:
-            meeting["summary"] = before
-            raise RuntimeError(job.warnings.pop())
+        snapshot = dict(meeting.get("speakers") or {})
+        summary = sm.summarize(
+            meeting["segments"], snapshot, meeting["meeting_date"], settings, job.engine,
+            self._progress(job), job.cancel.is_set,
+        )
         self._stage(job, "save", "Saving files…")
-        export.write_meeting(meeting, Path(settings["output_dir"]))
+        with self.write_lock:
+            # Summaries take minutes; the meeting may have been renamed or had speakers
+            # renamed meanwhile. Apply the summary to the latest version, never the
+            # stale copy (writing that would resurrect the old folder).
+            latest = self.get_meeting(job.meeting_id)
+            if not latest:
+                raise RuntimeError("The meeting was deleted while it was being summarized.")
+            current = latest.get("speakers") or {}
+            renames = {snapshot[k]: current[k] for k in snapshot if k in current and snapshot[k] != current[k]}
+            latest["summary"] = export.replace_names(summary, renames)
+            latest["summary_engine"] = self._engine_label(job.engine, settings)
+            self._save(latest, settings)
         job.stage_progress = 1.0

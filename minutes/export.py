@@ -136,6 +136,18 @@ def render_summary_md(meeting: dict) -> str:
 # ---------------------------------------------------------------- writing
 
 
+def write_atomic(path: Path, text: str) -> None:
+    """Write via a temp file + rename, so a crash or full disk leaves either the old
+    file or the new one, never a half-written one."""
+    tmp = path.with_name(f"{path.name}.tmp-{uuid.uuid4().hex[:8]}")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def _same_name(a: str, b: str) -> bool:
     # Windows (and default macOS) file systems are case-insensitive: "Notes" and "notes"
     # are the same file. Comparing case-insensitively everywhere is the safe direction:
@@ -212,12 +224,11 @@ def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = Non
         files.append(names["wav"])
     meeting["files"] = files
 
-    (folder / names["transcript"]).write_text(render_txt(meeting), encoding="utf-8")
-    (folder / names["srt"]).write_text(render_srt(meeting), encoding="utf-8")
-    (folder / names["summary"]).write_text(render_summary_md(meeting), encoding="utf-8")
-    (folder / names["json"]).write_text(
-        json.dumps({"app": APP_MARKER, **meeting}, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    write_atomic(folder / names["transcript"], render_txt(meeting))
+    write_atomic(folder / names["srt"], render_srt(meeting))
+    write_atomic(folder / names["summary"], render_summary_md(meeting))
+    # The JSON is the source of truth, so it's written last.
+    write_atomic(folder / names["json"], json.dumps({"app": APP_MARKER, **meeting}, indent=2, ensure_ascii=False))
     current = {f.casefold() for f in files}
     for f in old_files:
         if f.casefold() not in current and (folder / f).exists():

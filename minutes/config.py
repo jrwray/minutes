@@ -33,7 +33,9 @@ DEFAULTS: dict = {
 
 SECRET_KEYS = ("hf_token", "anthropic_api_key")
 
-_lock = threading.Lock()
+# Re-entrant: save() holds it across its load-modify-write so concurrent saves of
+# different keys can't overwrite each other.
+_lock = threading.RLock()
 
 
 def load() -> dict:
@@ -48,18 +50,20 @@ def load() -> dict:
 
 
 def save(patch: dict) -> dict:
-    current = load()
-    for key, value in patch.items():
-        if key not in DEFAULTS:
-            continue
-        # The UI sends secrets back masked; only overwrite when a real value is given.
-        if key in SECRET_KEYS and isinstance(value, str) and value.startswith("••"):
-            continue
-        current[key] = value
+    from .export import write_atomic
+
     with _lock:
+        current = load()
+        for key, value in patch.items():
+            if key not in DEFAULTS:
+                continue
+            # The UI sends secrets back masked; only overwrite when a real value is given.
+            if key in SECRET_KEYS and isinstance(value, str) and value.startswith("••"):
+                continue
+            current[key] = value
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        SETTINGS_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
-    return current
+        write_atomic(SETTINGS_PATH, json.dumps(current, indent=2))
+        return current
 
 
 def public(settings: dict) -> dict:
