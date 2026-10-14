@@ -275,16 +275,8 @@ def read_meeting(path: Path) -> dict | None:
     return data
 
 
-def scan(output_dir: Path) -> list[dict]:
+def candidate_files(output_dir: Path) -> list[list[Path]]:
+    """For each meeting folder, the JSON files that might be its meeting file."""
     if not output_dir.exists():
         return []
-    found = []
-    for folder in output_dir.iterdir():
-        if not folder.is_dir():
-            continue
-        for path in folder.glob("*.json"):
-            meeting = read_meeting(path)
-            if meeting:
-                found.append(meeting)
-                break
-    return found
+    return [sorted(folder.glob("*.json")) for folder in output_dir.iterdir() if folder.is_dir()]

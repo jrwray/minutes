@@ -72,6 +72,8 @@ class Manager:
         # saves, delete) so two writers never interleave on the same files.
         self.write_lock = threading.RLock()
         self.meetings: dict[str, Path] = {}  # meeting id -> json path
+        self._list_cache: dict[Path, tuple[tuple[int, int], dict | None]] = {}
+        self._list_lock = threading.Lock()
         threading.Thread(target=self._worker, daemon=True, name="minutes-worker").start()
 
     # ------------------------------------------------------------ public API
@@ -110,24 +112,49 @@ class Manager:
             return [j.public() for j in sorted(self.jobs.values(), key=lambda j: j.created)]
 
     def list_meetings(self) -> list[dict]:
-        settings = config.load()
-        found = export.scan(Path(settings["output_dir"]))
-        self.meetings = {m["id"]: Path(m["folder"]) / export.file_names(m["name"])["json"] for m in found}
-        out = []
-        for m in found:
-            s = m.get("summary") or {}
-            out.append({
-                "id": m["id"],
-                "name": m["name"],
-                "title": s.get("title") or "",
-                "meeting_date": m.get("meeting_date"),
-                "duration": m.get("duration"),
-                "created": m.get("created"),
-                "speakers": len(set((m.get("speakers") or {}).values())),
-                "has_summary": bool(m.get("summary")),
-                "action_items": len(s.get("action_items") or []),
-            })
-        return sorted(out, key=lambda m: m.get("created") or 0, reverse=True)
+        """Sidebar entries for every meeting folder. The UI polls this every few seconds,
+        so each JSON (which holds the whole transcript) is only parsed again when its
+        size or modification time changes."""
+        out_dir = Path(config.load()["output_dir"])
+        with self._list_lock:
+            entries, seen = [], set()
+            for paths in export.candidate_files(out_dir):
+                for path in paths:
+                    seen.add(path)
+                    try:
+                        st = path.stat()
+                    except OSError:
+                        continue
+                    key = (st.st_mtime_ns, st.st_size)
+                    cached = self._list_cache.get(path)
+                    if cached and cached[0] == key:
+                        entry = cached[1]
+                    else:
+                        meeting = export.read_meeting(path)
+                        entry = self._list_entry(meeting) if meeting else None
+                        self._list_cache[path] = (key, entry)
+                    if entry:
+                        entries.append((entry, path))
+                        break
+            for path in set(self._list_cache) - seen:
+                del self._list_cache[path]
+            self.meetings = {entry["id"]: path for entry, path in entries}
+            return sorted((e for e, _ in entries), key=lambda e: e.get("created") or 0, reverse=True)
+
+    @staticmethod
+    def _list_entry(m: dict) -> dict:
+        s = m.get("summary") or {}
+        return {
+            "id": m["id"],
+            "name": m["name"],
+            "title": s.get("title") or "",
+            "meeting_date": m.get("meeting_date"),
+            "duration": m.get("duration"),
+            "created": m.get("created"),
+            "speakers": len(set((m.get("speakers") or {}).values())),
+            "has_summary": bool(m.get("summary")),
+            "action_items": len(s.get("action_items") or []),
+        }
 
     def get_meeting(self, meeting_id: str) -> dict | None:
         path = self.meetings.get(meeting_id)
