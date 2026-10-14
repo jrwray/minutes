@@ -18,6 +18,11 @@ dependencies = [
     "av>=11,<16",  # faster-whisper 1.2 passes metadata_errors, removed in PyAV 16
 ]
 
+[project.optional-dependencies]
+# NVIDIA GPU transcription: cuBLAS for CTranslate2 (cuDNN ships inside its wheel).
+# Install with: uv sync --extra gpu
+gpu = ["nvidia-cublas-cu12>=12.4,<13"]
+
 [dependency-groups]
 dev = ["pytest>=8"]
 
