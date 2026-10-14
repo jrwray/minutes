@@ -48,7 +48,7 @@ These timings were measured on CPU only (Ryzen 7 7730U, a laptop chip, no GPU), 
 | Transcribe (`large-v3-turbo` int8) | 4 min | ~28 min |
 | Speakers (pyannote 3.1) | 7.5 min | ~50 min |
 | Summary (Ollama `qwen2.5:7b`) | 3 min | ~10–15 min |
-| Summary (Claude) | ~20 s | ~30–60 s |
+| Summary (Claude) | not measured | typically under a minute |
 
 Speaker detection is the slow step on CPU. Turn it off in Settings when you only need the text. GPU acceleration isn't wired up yet.
 
