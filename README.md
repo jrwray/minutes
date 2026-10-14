@@ -66,6 +66,21 @@ static/           UI (vanilla HTML/CSS/JS, no build step)
 Start.bat         launcher
 ```
 
+## Development
+
+```
+uv sync
+uv run pytest
+```
+
+The tests use fake transcription/speaker/summary engines and a temporary output folder, so they run in seconds and never touch your real meetings or settings. CI runs them on Windows for every push.
+
+The API only accepts requests addressed to `127.0.0.1`/`localhost`, and requests that change anything must send the header `X-Minutes: 1`, which keeps other websites open in your browser from using it. Scripts need to send that header too:
+
+```
+curl -H "X-Minutes: 1" -F "file=@meeting.mp4" http://127.0.0.1:7860/api/upload
+```
+
 ## License
 
 MIT
