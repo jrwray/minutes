@@ -26,6 +26,7 @@ DEFAULTS: dict = {
     "ollama_model": "qwen2.5:7b",
     "claude_model": "claude-opus-5-5",
     "anthropic_api_key": "",
+    "anthropic_workspace_id": "",  # only for keys that aren't scoped to a workspace
     "keep_wav": False,
     "cpu_threads": 0,  # 0 = auto
 }

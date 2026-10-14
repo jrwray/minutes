@@ -178,6 +178,33 @@ def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = Non
     return meeting
 
 
+def to_recycle_bin(path: Path) -> None:
+    """Move a folder to the Windows Recycle Bin (restorable), never a hard delete."""
+    import ctypes
+    from ctypes import wintypes
+
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", ctypes.c_uint16),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
+
+    fo_delete, fof_silent, fof_noconfirmation, fof_allowundo, fof_noerrorui = 3, 0x4, 0x10, 0x40, 0x400
+    op = SHFILEOPSTRUCTW(
+        None, fo_delete, str(path.resolve()) + "\0", None,  # pFrom must be double-null terminated
+        fof_allowundo | fof_noconfirmation | fof_silent | fof_noerrorui, False, None, None,
+    )
+    rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if rc or op.fAnyOperationsAborted or path.exists():
+        raise OSError(f"Windows couldn't move the folder to the Recycle Bin (code {rc}). Is a file open?")
+
+
 def read_meeting(path: Path) -> dict | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

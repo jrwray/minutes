@@ -37,7 +37,8 @@ const ICONS = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
-  hourglass: '<path d="M6 2h12M6 22h12M7 2v4a5 5 0 0 0 10 0V2M7 22v-4a5 5 0 0 1 10 0v4"/>',
+  trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
+  hourglass:'<path d="M6 2h12M6 22h12M7 2v4a5 5 0 0 0 10 0V2M7 22v-4a5 5 0 0 1 10 0v4"/>',
 };
 const icon = (name, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 const hydrate = (root = document) => root.querySelectorAll("[data-icon]").forEach((el) => {
@@ -86,6 +87,32 @@ function toast(text, kind = "ok", ms = 2600) {
   el.innerHTML = `${icon(kind === "err" ? "alert" : kind === "info" ? "sparkles" : "check")}<span>${esc(text)}</span>`;
   $("#toasts").appendChild(el);
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 260); }, ms);
+}
+
+function confirmDialog({ title, body, confirm }) {
+  return new Promise((resolve) => {
+    const wrap = document.createElement("div");
+    wrap.className = "modal-scrim";
+    wrap.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-icon">${icon("trash")}</div>
+      <h3>${esc(title)}</h3><p>${body}</p>
+      <div class="modal-actions"><button class="btn" data-a="0">Cancel</button><button class="btn danger" data-a="1">${esc(confirm)}</button></div></div>`;
+    const close = (v) => {
+      wrap.classList.add("out");
+      document.removeEventListener("keydown", onKey, true);
+      setTimeout(() => wrap.remove(), 200);
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); close(false); }
+      if (e.key === "Enter") { e.preventDefault(); close(true); }
+    };
+    wrap.onclick = (e) => { if (e.target === wrap) close(false); };
+    wrap.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => close(b.dataset.a === "1")));
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(wrap);
+    wrap.querySelector('[data-a="0"]').focus();
+  });
 }
 
 /* ================================================================ state */
@@ -368,6 +395,7 @@ function renderDetail() {
       <button class="btn" id="openBtn">${icon("folder")}Open folder</button>
       <div class="split"><button class="btn" id="resumBtn" ${busy ? "disabled" : ""}>${icon(busy ? "hourglass" : "sparkles")}${busy ? "Summarizing…" : m.summary ? "Re-summarize" : "Summarize"}${icon("chevron")}</button></div>
       ${m.summary ? `<button class="btn" id="copyBtn">${icon("copy")}Copy summary</button>` : ""}
+      <button class="btn danger-ghost" id="deleteBtn" title="Move to Recycle Bin">${icon("trash")}Delete</button>
     </div>
     <nav class="tabs" id="tabs">
       <button class="tab" data-tab="summary">${icon("sparkles")}Summary</button>
@@ -407,6 +435,22 @@ function renderDetail() {
   if ($("#copyBtn")) $("#copyBtn").onclick = async () => {
     try { await navigator.clipboard.writeText(summaryMarkdown(m)); toast("Summary copied"); }
     catch { toast("Couldn't access the clipboard", "err"); }
+  };
+
+  $("#deleteBtn").onclick = async () => {
+    const ok = await confirmDialog({
+      title: "Delete this meeting?",
+      body: `<b>${esc(m.name)}</b> and its ${(m.files || []).length} files will be moved to the Recycle Bin. You can restore them from there.`,
+      confirm: "Move to Recycle Bin",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/meetings/${m.id}`, { method: "DELETE" });
+      toast("Moved to Recycle Bin");
+      state.selected = null; state.meeting = null;
+      await loadMeetings();
+      renderHistory(); renderDetail();
+    } catch (e) { toast(e.message, "err", 5000); }
   };
 
   document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => { state.tab = t.dataset.tab; renderPanel(); }));
@@ -683,6 +727,8 @@ function renderSettings(keepScroll = false) {
         <div class="field"><label>Claude model</label><select class="select" data-k="claude_model">
           ${opt("claude-opus-5-5", "Claude Opus 5.5 · best quality", s.claude_model)}${opt("claude-sonnet-5-5", "Claude Sonnet 5.5 · faster, cheaper", s.claude_model)}${opt("claude-haiku-5-5", "Claude Haiku 5.5 · cheapest", s.claude_model)}</select></div>
         <div class="field"><label>Anthropic API key</label><input class="input" type="password" data-k="anthropic_api_key" data-secret placeholder="${s.anthropic_api_key ? esc(s.anthropic_api_key) : "sk-ant-…"}" autocomplete="off"></div>
+        <div class="field"><label>Workspace ID <span style="color:var(--faint);font-weight:400">· optional</span></label><input class="input" data-k="anthropic_workspace_id" value="${esc(s.anthropic_workspace_id || "")}" placeholder="wrkspc_…" spellcheck="false" autocomplete="off">
+          <div class="help">Only needed if your key isn't scoped to a workspace. Find it in the Anthropic console under Workspaces.</div></div>
         <div class="callout">${icon("cloud")}<span>The transcript text (not the audio) is sent to Anthropic for the summary. Transcription and speakers still run locally.</span></div>
       ` : ""}
       ${s.summary_engine !== "none" ? `<div class="help" style="margin-top:8px">You can switch engines for any meeting with “Re-summarize”.</div>` : ""}

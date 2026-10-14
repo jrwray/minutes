@@ -150,6 +150,15 @@ class Manager:
         self.meetings[meeting["id"]] = Path(meeting["folder"]) / export.file_names(meeting["name"])["json"]
         return meeting
 
+    def delete_meeting(self, meeting_id: str) -> None:
+        meeting = self.get_meeting(meeting_id)
+        if not meeting:
+            raise KeyError(meeting_id)
+        if any(j.meeting_id == meeting_id and j.status in ("queued", "running") for j in self.jobs.values()):
+            raise RuntimeError("This meeting is being summarized. Wait for it to finish or cancel it first.")
+        export.to_recycle_bin(Path(meeting["folder"]))
+        self.meetings.pop(meeting_id, None)
+
     # ------------------------------------------------------------ internals
 
     def _enqueue(self, job: Job) -> Job:

@@ -224,7 +224,12 @@ def _claude(text, meeting_date, settings, on_progress) -> dict:
     import anthropic
 
     key = settings.get("anthropic_api_key") or None
-    client = anthropic.Anthropic(api_key=key, timeout=600)
+    workspace = (settings.get("anthropic_workspace_id") or "").strip()
+    client = anthropic.Anthropic(
+        api_key=key,
+        timeout=600,
+        default_headers={"anthropic-workspace-id": workspace} if workspace else None,
+    )
     on_progress(0.1, "Summary: sent to Claude…")
     request = dict(
         model=settings.get("claude_model") or "claude-opus-5-5",
@@ -239,13 +244,16 @@ def _claude(text, meeting_date, settings, on_progress) -> dict:
         response = client.beta.messages.create(
             betas=["server-side-fallback-2026-07-01"], fallbacks="default", **request
         )
-    except anthropic.AuthenticationError as exc:
-        raise RuntimeError("Claude rejected the API key. Check it in Settings.") from exc
-    except anthropic.BadRequestError:
-        # Model or account without fallback support — plain request.
-        response = client.messages.create(**request)
-    except anthropic.APIConnectionError as exc:
-        raise RuntimeError("Couldn't reach the Claude API. Check your internet connection.") from exc
+    except anthropic.BadRequestError as exc:
+        if "workspace" in str(exc).lower():
+            raise _workspace_error() from exc
+        # Model or account without fallback support: retry as a plain request.
+        try:
+            response = client.messages.create(**request)
+        except anthropic.APIError as retry_exc:
+            raise _claude_error(retry_exc) from retry_exc
+    except anthropic.APIError as exc:
+        raise _claude_error(exc) from exc
 
     if response.stop_reason == "refusal":
         raise RuntimeError("Claude declined to summarize this transcript.")
@@ -254,6 +262,28 @@ def _claude(text, meeting_date, settings, on_progress) -> dict:
     raw = "".join(b.text for b in response.content if b.type == "text")
     on_progress(1.0, "Summary: done")
     return _parse(raw)
+
+
+def _workspace_error() -> RuntimeError:
+    return RuntimeError(
+        "This Anthropic key isn't tied to a workspace. Add your Workspace ID in Settings → Summary, "
+        "or create a key inside a workspace at console.anthropic.com."
+    )
+
+
+def _claude_error(exc) -> RuntimeError:
+    import anthropic
+
+    if isinstance(exc, anthropic.AuthenticationError):
+        return RuntimeError("Claude rejected the API key. Check it in Settings.")
+    if isinstance(exc, anthropic.APIConnectionError):
+        return RuntimeError("Couldn't reach the Claude API. Check your internet connection.")
+    if isinstance(exc, anthropic.RateLimitError):
+        return RuntimeError("Claude rate limit hit. Wait a minute and re-summarize.")
+    if "workspace" in str(exc).lower():
+        return _workspace_error()
+    message = getattr(exc, "message", None) or str(exc)
+    return RuntimeError(f"Claude API error: {message}")
 
 
 # ---------------------------------------------------------------- helpers

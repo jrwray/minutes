@@ -129,6 +129,17 @@ def update_meeting(meeting_id: str, patch: MeetingPatch):
         raise HTTPException(409, f"Couldn't rename: {exc.strerror or exc}. Is a file open in another app?")
 
 
+@app.delete("/api/meetings/{meeting_id}")
+def delete_meeting(meeting_id: str):
+    try:
+        manager.delete_meeting(meeting_id)
+    except KeyError:
+        raise HTTPException(404, "Meeting not found")
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(409, str(exc))
+    return {"ok": True}
+
+
 class SummarizeRequest(BaseModel):
     engine: str
 
