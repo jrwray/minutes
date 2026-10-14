@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import sys
 import threading
 import warnings
 import webbrowser
@@ -11,7 +12,17 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
+def utf8_console() -> None:
+    """Windows consoles default to a legacy code page (cp1252) that can't encode
+    characters like '→' or names in other scripts; printing or logging them would
+    raise. Switch our streams to UTF-8 and never fail on an unencodable character."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> None:
+    utf8_console()
     parser = argparse.ArgumentParser(prog="minutes")
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--no-browser", action="store_true")
