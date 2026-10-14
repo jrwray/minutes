@@ -52,12 +52,23 @@ async def same_origin_writes(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def revalidate_ui_files(request: Request, call_next):
+    # Without this, browsers cache app.js/app.css heuristically, and after an update
+    # the old UI keeps running against the new server. "no-cache" means "check first";
+    # unchanged files come back as a tiny 304.
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+    return FileResponse(STATIC / "index.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
