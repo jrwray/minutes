@@ -212,9 +212,9 @@ class Manager:
         cancelled = job.cancel.is_set
 
         self._stage(job, "audio", "Reading audio…")
-        audio = audio_mod.load_audio(job.upload)
+        audio = audio_mod.load_audio(job.upload, job.filename)
         if len(audio) < audio_mod.SAMPLE_RATE // 2:
-            raise RuntimeError("No audio track found in this file.")
+            raise audio_mod.AudioError(f"“{job.filename}” has less than half a second of audio.")
         job.stage_progress = 1.0
 
         self._stage(job, "transcribe", "Loading Whisper…")
