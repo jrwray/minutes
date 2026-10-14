@@ -1,0 +1,6 @@
+# local state: settings (API keys/tokens), uploads, work files
+data/
+.venv/
+__pycache__/
+*.pyc
+.claude/

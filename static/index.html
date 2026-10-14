@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minutes</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237C6CFF'/%3E%3Cg stroke='white' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M9 13v6M13 9v14M17 12v8M21 10v12M25 14v4'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" id="logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="wordmark">Minutes</span>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeBtn" title="Theme"></button>
+      <button class="icon-btn" id="settingsBtn" title="Settings"></button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.m4a,.webm" multiple hidden>
+        <span class="drop-icon" data-icon="upload"></span>
+        <span class="drop-title">Drop recordings</span>
+        <span class="drop-sub">or click to browse · MP4, MOV, MKV, M4A, MP3, WAV</span>
+      </label>
+
+      <section class="list-section" id="queueSection" hidden>
+        <h3 class="section-label">In progress</h3>
+        <div id="queue" class="stack"></div>
+      </section>
+
+      <section class="list-section grow">
+        <div class="section-head">
+          <h3 class="section-label">Meetings</h3>
+          <button class="ghost-btn tiny" id="openOutput" title="Open transcripts folder"></button>
+        </div>
+        <div id="history" class="stack"></div>
+      </section>
+    </aside>
+
+    <section class="detail" id="detail"></section>
+  </main>
+
+  <div class="drawer-scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-label="Settings"></aside>
+
+  <div class="dragover" id="dragover">
+    <div class="dragover-card">
+      <span data-icon="upload"></span>
+      <strong>Drop to transcribe</strong>
+      <small>Everything stays on this computer</small>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
