@@ -15,10 +15,17 @@ APP_MARKER = "minutes"
 _ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+# Windows device names: reserved even with an extension ("CON.srt"), and a folder with
+# one of these names can't be opened or deleted from Explorer.
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
 def clean_name(name: str) -> str:
-    name = _ILLEGAL.sub("", name).strip().strip(".")
-    name = re.sub(r"\s+", " ", name)
-    return name[:100] or "Meeting"
+    name = _ILLEGAL.sub("", name)
+    name = re.sub(r"\s+", " ", name)[:100].strip().strip(".").strip()
+    if name.split(".")[0].upper() in _RESERVED:
+        name += "_"
+    return name or "Meeting"
 
 
 def slug_title(title: str) -> str:
