@@ -7,6 +7,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 @pytest.fixture
+def isolated(tmp_path, monkeypatch):
+    """Point settings, work dir and output dir at a temp folder."""
+    from minutes import config
+
+    data = tmp_path / "data"
+    monkeypatch.setattr(config, "DATA_DIR", data)
+    monkeypatch.setattr(config, "WORK_DIR", data / "work")
+    monkeypatch.setattr(config, "SETTINGS_PATH", data / "settings.json")
+    config.save({"output_dir": str(tmp_path / "Transcripts"), "summary_engine": "none", "diarization": False})
+    return tmp_path
+
+
+@pytest.fixture
+def client(isolated):
+    """In-process API client addressed the way the browser addresses the real server."""
+    from fastapi.testclient import TestClient
+
+    from minutes import server
+
+    with TestClient(server.app, base_url="http://127.0.0.1:7860", headers={"X-Minutes": "1"}) as c:
+        yield c
+
+
+@pytest.fixture
 def meeting():
     """A small, fully-formed meeting as the pipeline would produce it."""
     return {

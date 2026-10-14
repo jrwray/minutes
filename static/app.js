@@ -67,10 +67,11 @@ const SPEAKER_COLORS = ["#7c6cff", "#f2766b", "#1fb5a3", "#eaa23a", "#3b9df7", "
 const LANGS = { auto: "Auto-detect", en: "English", es: "Spanish", fr: "French", de: "German", it: "Italian", pt: "Portuguese", nl: "Dutch", pl: "Polish", ja: "Japanese", zh: "Chinese", ko: "Korean", hi: "Hindi", ar: "Arabic" };
 
 async function api(path, opts = {}) {
-  const init = { ...opts };
+  // X-Minutes marks requests as coming from this page; the server rejects writes without it.
+  const init = { ...opts, headers: { "X-Minutes": "1" } };
   if (opts.body && typeof opts.body !== "string" && !(opts.body instanceof FormData)) {
     init.body = JSON.stringify(opts.body);
-    init.headers = { "Content-Type": "application/json" };
+    init.headers["Content-Type"] = "application/json";
   }
   const res = await fetch(path, init);
   if (!res.ok) {
@@ -179,6 +180,7 @@ function uploadFiles(files) {
     fd.append("last_modified", String(file.lastModified || Date.now()));
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/upload");
+    xhr.setRequestHeader("X-Minutes", "1");
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) { state.uploads.get(tmp).pct = e.loaded / e.total; renderQueue(); }
     };

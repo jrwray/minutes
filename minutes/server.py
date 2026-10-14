@@ -5,19 +5,47 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import config, summarize
 from .jobs import Manager
 
 STATIC = config.ROOT / "static"
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 app = FastAPI(title="Minutes", docs_url=None, redoc_url=None)
 manager = Manager()
+
+
+# ---------------------------------------------------------------- request protection
+# The server only listens on 127.0.0.1, but any web page open in the user's browser can
+# still send requests to it. Two checks keep other sites out:
+#  1. Host allowlist: defeats DNS rebinding (a hostile domain re-pointed at 127.0.0.1
+#     would otherwise be able to read transcripts).
+#  2. State-changing requests need the custom X-Minutes header, which a cross-site page
+#     can't add without a CORS preflight that this server never grants, and any Origin
+#     sent must match the server's own address.
+
+
+@app.middleware("http")
+async def same_origin_writes(request: Request, call_next):
+    if request.method in UNSAFE_METHODS:
+        origin = request.headers.get("origin")
+        if origin and urlsplit(origin).netloc != request.headers.get("host", ""):
+            return JSONResponse({"detail": "Cross-site request blocked."}, status_code=403)
+        if request.headers.get("x-minutes") != "1":
+            return JSONResponse({"detail": "Missing X-Minutes header."}, status_code=403)
+    return await call_next(request)
+
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 @app.get("/")
