@@ -16,6 +16,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import config, summarize
 from .jobs import Manager, clean_work_dir
+from .watcher import FolderWatcher
 
 STATIC = config.ROOT / "static"
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
@@ -24,7 +25,10 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     clean_work_dir()
+    watcher = FolderWatcher(manager.submit_file)
+    watcher.start()
     yield
+    watcher.stop()
 
 
 app = FastAPI(title="Minutes", docs_url=None, redoc_url=None, lifespan=lifespan)
