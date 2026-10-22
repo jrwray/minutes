@@ -150,6 +150,8 @@ $("#themeBtn").onclick = () => {
   toast(`Theme: ${theme}`, "info", 1400);
 };
 
+const trashName = () => state.status?.trash || "Recycle Bin";
+
 /* ================================================================ status pills */
 function renderStatus() {
   const s = state.status;
@@ -409,7 +411,7 @@ function renderDetail() {
       <button class="btn" id="openBtn">${icon("folder")}Open folder</button>
       <div class="split"><button class="btn" id="resumBtn" ${busy ? "disabled" : ""}>${icon(busy ? "hourglass" : "sparkles")}${busy ? "Summarizing…" : m.summary ? "Re-summarize" : "Summarize"}${icon("chevron")}</button></div>
       ${m.summary ? `<button class="btn" id="copyBtn">${icon("copy")}Copy summary</button>` : ""}
-      <button class="btn danger-ghost" id="deleteBtn" title="Move to Recycle Bin">${icon("trash")}Delete</button>
+      <button class="btn danger-ghost" id="deleteBtn" title="Move to ${esc(trashName())}">${icon("trash")}Delete</button>
     </div>
     <nav class="tabs" id="tabs">
       <button class="tab" data-tab="summary">${icon("sparkles")}Summary</button>
@@ -454,13 +456,13 @@ function renderDetail() {
   $("#deleteBtn").onclick = async () => {
     const ok = await confirmDialog({
       title: "Delete this meeting?",
-      body: `<b>${esc(m.name)}</b> and its ${(m.files || []).length} files will be moved to the Recycle Bin. You can restore them from there.`,
-      confirm: "Move to Recycle Bin",
+      body: `<b>${esc(m.name)}</b> and its ${(m.files || []).length} files will be moved to the ${esc(trashName())}. You can restore them from there.`,
+      confirm: `Move to ${trashName()}`,
     });
     if (!ok) return;
     try {
       await api(`/api/meetings/${m.id}`, { method: "DELETE" });
-      toast("Moved to Recycle Bin");
+      toast(`Moved to ${trashName()}`);
       state.selected = null; state.meeting = null;
       await loadMeetings();
       renderHistory(); renderDetail();

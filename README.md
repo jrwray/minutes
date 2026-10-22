@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jrwray/minutes/actions/workflows/ci.yml/badge.svg)](https://github.com/jrwray/minutes/actions/workflows/ci.yml)
 
-A local meeting transcriber for Windows. Drop in a recording and get back a timestamped transcript with speaker names, a meeting summary, and neatly named files. Transcription and speaker detection run entirely on your machine, with no upload sites and no command-line juggling.
+A local meeting transcriber for Windows, macOS and Linux. Drop in a recording and get back a timestamped transcript with speaker names, a meeting summary, and neatly named files. Transcription and speaker detection run entirely on your machine, with no upload sites and no command-line juggling.
 
 ```
 meeting.mp4 → transcript (Whisper) → speakers (pyannote) → summary (Ollama or Claude) → named folder
@@ -18,15 +18,15 @@ meeting.mp4 → transcript (Whisper) → speakers (pyannote) → summary (Ollama
   - **Ollama** (fully local) or **Claude** (Anthropic API), switchable per meeting
 - **Sensible file names**, such as `2026-10-14_Q4-Budget-Review/`, using the recording date plus an AI-generated title. Edit the name in the UI and the folder and every file are renamed to match
 - Outputs `_transcript.txt`, `.srt` subtitles, `_summary.md`, full `.json`, and an optional 16 kHz WAV
-- **Delete** a meeting from the UI, which moves its folder to the Recycle Bin so it can be restored
+- **Delete** a meeting from the UI, which moves its folder to the Recycle Bin (or Trash on macOS and Linux) so it can be restored
 - **Safe by default:** crash-safe saves, plain-language errors for unreadable files, and an API other websites can't reach (see [Security](#security))
 - Light and dark themes, keyboard friendly
 
-## Setup (Windows)
+## Setup
 
 1. Install [Python](https://www.python.org/downloads/) 3.11+ and then [uv](https://docs.astral.sh/uv/): `pip install uv`
 2. Clone this repo and run `uv sync` inside it. This installs everything, ffmpeg included, so you don't need a separate install.
-3. Double-click **`Start.bat`**. The app opens in your browser at http://127.0.0.1:7860 and asks whether to transcribe on the CPU or GPU.
+3. Start it: double-click **`Start.bat`** on Windows or **`Start.command`** on macOS, or run `./start.sh` on Linux. The app opens in your browser at http://127.0.0.1:7860 and asks whether to transcribe on the CPU or GPU.
 
 The Whisper model (~1.6 GB) downloads automatically on first use, and after that transcription works offline.
 
@@ -36,7 +36,7 @@ The Whisper model (~1.6 GB) downloads automatically on first use, and after that
 2. Run `uv sync --extra gpu` to add cuBLAS (~500 MB; cuDNN is already included)
 3. Pick **GPU** in the first-run popup, or under **Settings → Transcription → Run on**
 
-The GPU option is disabled when no NVIDIA GPU or no GPU libraries are found, and the settings panel explains which. Only transcription uses the GPU for now; speaker detection stays on the CPU. GPU support is new: detection and the CPU fallback are tested, but it hasn't yet been benchmarked on NVIDIA hardware, so reports are welcome.
+The GPU option is disabled when no NVIDIA GPU or no GPU libraries are found, and the settings panel explains which. Only transcription uses the GPU for now; speaker detection stays on the CPU. GPU support is new: detection and the CPU fallback are tested, but it hasn't yet been benchmarked on NVIDIA hardware, so reports are welcome ([#5](https://github.com/jrwray/minutes/issues/5)). Macs have no NVIDIA GPU, so there it runs on the CPU.
 
 ### Optional: speaker detection
 
@@ -77,7 +77,8 @@ minutes/
   server.py       FastAPI routes + request protection
 static/           UI (vanilla HTML/CSS/JS, no build step)
 tests/            pytest suite (fake engines, no models needed)
-Start.bat         launcher
+Start.bat         launcher (Windows)
+start.sh          launcher (macOS/Linux); Start.command wraps it for Finder
 ```
 
 ## Development
@@ -87,7 +88,7 @@ uv sync
 uv run pytest
 ```
 
-The tests use fake transcription/speaker/summary engines and a temporary output folder, so they run in seconds and never touch your real meetings or settings. CI runs them on Windows for every push.
+The tests use fake transcription/speaker/summary engines and a temporary output folder, so they run in seconds and never touch your real meetings or settings. CI runs them on Windows, macOS and Linux for every push.
 
 ## Security
 

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import config, summarize
+from . import config, export, summarize
 from .jobs import Manager, clean_work_dir
 
 STATIC = config.ROOT / "static"
@@ -113,6 +113,7 @@ def status():
                    "model": s["claude_model"]},
         "engine": s["summary_engine"],
         "output_dir": s["output_dir"],
+        "trash": export.TRASH_NAME,
     }
 
 
@@ -219,7 +220,7 @@ def open_folder(meeting_id: str):
     m = manager.get_meeting(meeting_id)
     if not m:
         raise HTTPException(404, "Meeting not found")
-    os.startfile(m["folder"])  # noqa: S606 — local desktop app
+    export.open_in_file_manager(Path(m["folder"]))
     return {"ok": True}
 
 
@@ -227,5 +228,5 @@ def open_folder(meeting_id: str):
 def open_output():
     folder = Path(config.load()["output_dir"])
     folder.mkdir(parents=True, exist_ok=True)
-    os.startfile(folder)
+    export.open_in_file_manager(folder)
     return {"ok": True}

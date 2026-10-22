@@ -1,3 +1,5 @@
 * text=auto
 # cmd.exe mis-parses batch files with LF line endings
 *.bat text eol=crlf
+*.sh text eol=lf
+*.command text eol=lf

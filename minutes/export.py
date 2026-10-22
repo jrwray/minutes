@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -251,8 +252,23 @@ def write_meeting(meeting: dict, output_dir: Path, wav_source: Path | None = Non
     return meeting
 
 
+# What the system calls its restorable-delete folder, for UI text.
+TRASH_NAME = "Recycle Bin" if os.name == "nt" else "Trash"
+
+
 def to_recycle_bin(path: Path) -> None:
-    """Move a folder to the Windows Recycle Bin (restorable), never a hard delete."""
+    """Move a folder to the Recycle Bin / Trash (restorable), never a hard delete."""
+    if os.name == "nt":
+        _windows_recycle(path)
+    elif sys.platform == "darwin":
+        _macos_trash(path)
+    else:
+        _freedesktop_trash(path)
+    if path.exists():
+        raise OSError(f"Couldn't move the folder to the {TRASH_NAME}. Is a file open?")
+
+
+def _windows_recycle(path: Path) -> None:
     import ctypes
     from ctypes import wintypes
 
@@ -276,6 +292,46 @@ def to_recycle_bin(path: Path) -> None:
     rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
     if rc or op.fAnyOperationsAborted or path.exists():
         raise OSError(f"Windows couldn't move the folder to the Recycle Bin (code {rc}). Is a file open?")
+
+
+def _macos_trash(path: Path) -> None:
+    """Ask Finder, so "Put Back" works. The path is passed as an argument, never spliced into the script."""
+    import subprocess
+
+    script = 'on run argv\ntell application "Finder" to delete (POSIX file (item 1 of argv) as alias)\nend run'
+    subprocess.run(["osascript", "-e", script, str(path.resolve())], check=True, capture_output=True, timeout=30)
+
+
+def _freedesktop_trash(path: Path) -> None:
+    """Linux: `gio trash` when available, else the freedesktop.org Trash spec in the home trash."""
+    import shutil
+    import subprocess
+    from datetime import datetime
+    from urllib.parse import quote
+
+    if shutil.which("gio"):
+        if subprocess.run(["gio", "trash", str(path)], capture_output=True, timeout=30).returncode == 0:
+            return
+    trash = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "Trash"
+    (trash / "files").mkdir(parents=True, exist_ok=True)
+    (trash / "info").mkdir(parents=True, exist_ok=True)
+    name, n = path.name, 1
+    while (trash / "files" / name).exists() or (trash / "info" / f"{name}.trashinfo").exists():
+        n += 1
+        name = f"{path.name}.{n}"
+    info = f"[Trash Info]\nPath={quote(str(path.resolve()))}\nDeletionDate={datetime.now():%Y-%m-%dT%H:%M:%S}\n"
+    (trash / "info" / f"{name}.trashinfo").write_text(info, encoding="utf-8")
+    shutil.move(str(path), trash / "files" / name)
+
+
+def open_in_file_manager(folder: Path) -> None:
+    """Show a folder in Explorer, Finder or the Linux file manager."""
+    if os.name == "nt":
+        os.startfile(folder)  # noqa: S606 (local desktop app)
+        return
+    import subprocess
+
+    subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(folder)])  # noqa: S603
 
 
 def read_meeting(path: Path) -> dict | None:
