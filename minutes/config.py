@@ -31,6 +31,7 @@ DEFAULTS: dict = {
     "anthropic_api_key": "",
     "anthropic_workspace_id": "",  # only for keys that aren't scoped to a workspace
     "keep_wav": False,
+    "watch_dir": "",  # "" = off; otherwise new recordings in this folder are queued
     "cpu_threads": 0,  # 0 = auto
 }
 

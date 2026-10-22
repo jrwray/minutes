@@ -761,6 +761,8 @@ function renderSettings(keepScroll = false) {
     <div class="group"><h3>${icon("folder")}Output</h3>
       <div class="field"><label>Save meetings to</label><div class="row" style="gap:8px"><input class="input" data-k="output_dir" value="${esc(s.output_dir)}" style="flex:1"><button class="btn" id="openOut" style="flex:none">${icon("folder")}</button></div>
         <div class="help">Each meeting gets its own folder, named like <code style="font-family:var(--mono)">2026-10-14_Q4-Budget-Review</code>.</div></div>
+      <div class="field"><label>Watch folder</label><input class="input" data-k="watch_dir" value="${esc(s.watch_dir || "")}" placeholder="Optional, e.g. where Zoom or OBS saves recordings">
+        <div class="help">New recordings that appear here are queued automatically once they finish saving. Originals are never moved or deleted. Leave empty to turn it off.</div></div>
       <label class="toggle field"><span class="tl">Keep a WAV copy<small>16 kHz mono, saved next to the transcript</small></span><input type="checkbox" data-k="keep_wav" ${s.keep_wav ? "checked" : ""}><span class="switch"></span></label>
     </div>
     <div class="callout">${icon("lock")}<span>Keys are stored only in <code>data/settings.json</code> on this computer.</span></div>

@@ -18,6 +18,7 @@ meeting.mp4 → transcript (Whisper) → speakers (pyannote) → summary (Ollama
   - **Ollama** (fully local) or **Claude** (Anthropic API), switchable per meeting
 - **Sensible file names**, such as `2026-10-14_Q4-Budget-Review/`, using the recording date plus an AI-generated title. Edit the name in the UI and the folder and every file are renamed to match
 - Outputs `_transcript.txt`, `.srt` subtitles, `_summary.md`, full `.json`, and an optional 16 kHz WAV
+- **Watch folder** (optional): point it at where Zoom, OBS or your recorder saves files, and new recordings are queued on their own once they finish saving. Originals are never moved or deleted
 - **Delete** a meeting from the UI, which moves its folder to the Recycle Bin so it can be restored
 - **Safe by default:** crash-safe saves, plain-language errors for unreadable files, and an API other websites can't reach (see [Security](#security))
 - Light and dark themes, keyboard friendly
@@ -74,6 +75,7 @@ minutes/
   summarize.py    Ollama / Claude summaries (structured JSON)
   export.py       naming, crash-safe .txt/.srt/.md/.json writers
   jobs.py         single-worker queue
+  watcher.py      watch folder (polls, waits for files to finish, queues copies)
   server.py       FastAPI routes + request protection
 static/           UI (vanilla HTML/CSS/JS, no build step)
 tests/            pytest suite (fake engines, no models needed)
