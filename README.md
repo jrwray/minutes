@@ -8,6 +8,13 @@ A local meeting transcriber for Windows. Drop in a recording and get back a time
 meeting.mp4 → transcript (Whisper) → speakers (pyannote) → summary (Ollama or Claude) → named folder
 ```
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot-light.png" alt="Minutes showing a meeting summary with action items, decisions, open questions and topic timestamps" width="860">
+</picture>
+
+<sub>Shown with the sample meeting from <code>tools/demo.py</code>.</sub>
+
 ## Features
 
 - **Drag-and-drop web UI** on `localhost`, with a queue, live progress and time-remaining estimates, plus a live preview of the text as it's transcribed
@@ -77,6 +84,7 @@ minutes/
   server.py       FastAPI routes + request protection
 static/           UI (vanilla HTML/CSS/JS, no build step)
 tests/            pytest suite (fake engines, no models needed)
+tools/demo.py     UI demo with a sample meeting (no models needed)
 Start.bat         launcher
 ```
 
@@ -85,6 +93,12 @@ Start.bat         launcher
 ```
 uv sync
 uv run pytest
+```
+
+To try the interface without downloading any models, run the demo. It starts on port 7861 with a sample meeting and stand-in engines, and deletes its temp folder on exit:
+
+```
+uv run python tools/demo.py
 ```
 
 The tests use fake transcription/speaker/summary engines and a temporary output folder, so they run in seconds and never touch your real meetings or settings. CI runs them on Windows for every push.
