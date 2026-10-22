@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -15,7 +16,7 @@ WORK_DIR = DATA_DIR / "work"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 
 DEFAULTS: dict = {
-    "output_dir": str(Path.home() / "Videos" / "Transcripts"),
+    "output_dir": str(Path.home() / ("Movies" if sys.platform == "darwin" else "Videos") / "Transcripts"),
     "whisper_model": "large-v3-turbo",
     "compute_type": "int8",  # CPU; the GPU always uses float16
     "device": "",  # "" = not chosen yet (the UI asks on first run) | "cpu" | "gpu"
